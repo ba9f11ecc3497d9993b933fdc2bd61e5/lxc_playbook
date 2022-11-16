@@ -1,0 +1,117 @@
+---
+- name: Install lxc
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.package:
+    name:
+      - lxc
+      - libpam-cgfs
+      - uidmap
+      - lxcfs
+    state: present
+
+- name: enable lcxfs
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.service:
+    name: lxcfs
+    enabled: yes
+
+- name: start lxcfs
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.service:
+    name: lxcfs
+    state: started
+
+- name: Template a file to /etc/subuid
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/subuid.j2
+    dest: /etc/subuid
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Template a file to /etc/subgid
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/subgid.j2
+    dest: /etc/subgid
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create directory /home/debian/.config/lxc
+  ansible.builtin.file: 
+    path: /home/debian/.config/lxc
+    state: directory
+    owner: debian
+    group: debian 
+    mode: '0755'
+
+- name: Template a file to /home/debian/.config/lxc/default.conf 
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/lxc_default.conf.j2
+    dest: /home/debian/.config/lxc/default.conf
+    owner: debian
+    group: debian
+    mode: '0644'
+
+- name: Template a file to /etc/lxc/default.conf 
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/lxc_default.conf.j2
+    dest: /etc/default.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create directory /etc/systemd/system/user@.service.d
+  ansible.builtin.file: 
+    path: /etc/systemd/system/user@.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: create /etc/lxc/lxc-usernet
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/lxc-usernet.j2
+    dest: /etc/lxc/lxc-usernet
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: allow delegation of other controllers (cpu, cpuset, and io)
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/delegate.conf.j2
+    dest: /etc/systemd/system/user@.service.d/delegate.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: systemctl daemon-reload
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.command:
+    cmd: systemctl daemon-reload

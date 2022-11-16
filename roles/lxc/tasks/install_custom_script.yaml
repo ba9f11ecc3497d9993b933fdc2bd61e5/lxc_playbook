@@ -1,0 +1,11 @@
+---
+- name: install script lx-containers in /usr/local/bin
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/lx-containers.j2
+    dest: /usr/local/bin/lx-containers
+    owner: debian
+    group: debian
+    mode: '0744'

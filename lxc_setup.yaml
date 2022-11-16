@@ -1,0 +1,6 @@
+---
+- hosts: lxc 
+  vars_files:
+    - vars/lxc.yaml
+  roles:
+    - lxc

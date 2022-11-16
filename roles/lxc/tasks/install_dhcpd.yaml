@@ -1,0 +1,46 @@
+---
+- name: Install isc-dhcp-server
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.package:
+    name: isc-dhcp-server
+    state: present
+
+- name: Template a file to /etc/default/isc-dhcp-server
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/default_isc-dhcp-server.j2
+    dest: /etc/default/isc-dhcp-server
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: get ipv4 dns server from host
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.shell: grep nameserver /etc/resolv.conf | grep '\.' | grep -v "^#" | awk '{print $2}' 
+  register: nameserver_v4
+
+- name: get ipv6 dns server from host
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.shell: grep nameserver /etc/resolv.conf | grep ':' | grep -v "^#" | awk '{print $2}' 
+  register: nameserver_v6
+
+- name: Template a file to /etc/dhcp/dhcpd.conf
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/dhcpd.conf.j2
+    dest: /etc/dhcp/dhcpd.conf
+    owner: root
+    group: root
+    mode: '0644'
+  vars :
+    nameserver_v4: "{{ nameserver_v4 }}"

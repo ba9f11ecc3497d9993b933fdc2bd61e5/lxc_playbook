@@ -1,0 +1,2 @@
+[lxc]
+217.69.2.216 ansible_ssh_private_key_file=/home/youruser/.ssh/yourkey_ihope_u_use_ed25519 ansible_user=root

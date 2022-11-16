@@ -1,0 +1,13 @@
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+iface {{ ansible_default_ipv4.alias }} inet manual 
+
+auto br0
+iface br0 inet dhcp
+  bridge_ports    {{ ansible_default_ipv4.alias}}
+  hwaddress ether {{ ansible_default_ipv4.macaddress }} 
+
+iface br0 inet6 auto 
+  bridge_ports    {{ ansible_interfaces[1] }}

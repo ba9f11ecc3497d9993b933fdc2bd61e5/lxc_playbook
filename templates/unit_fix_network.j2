@@ -1,0 +1,9 @@
+[Unit]
+Description=cleanup lxcbr0 at boot add 10.0.0.1 to br0
+After=default.target
+
+[Service]
+ExecStart=/usr/local/bin/fix_network
+
+[Install]
+WantedBy=default.target

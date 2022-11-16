@@ -1,0 +1,326 @@
+#!/bin/bash
+
+#######################
+#####  variables  #####
+#######################
+
+ARGS_NUM=$#
+OPT="$1"
+CONTAINER_NAME=$2
+
+DISTRO_COMMON_NAMES=("alpine 3.15 (works fine)" "alpine latest (works fine)" "amazonlinux latest (ipv6 only, no dns resolution)" "centos 9 (stream) (works fine)" "debian 10 (works fine)" "debian 11 (works fine)" "rockylinux 8 (works fine)" "rockylinux 9 (works fine)" "ubuntu 20.04 (works fine)" "ubuntu 22.04 (works fine)" "archlinux current (ipv6 connectivity only, must install dhclient to get ipv4 and set default gw manually)" "busybox 1.34.1(error metadata missing on tarball)" "kali current (works fine)")
+
+ALPINE_3_15=("alpine" "3.15" "amd64")
+ALPINE_EDGE=("alpine" "edge" "amd64")
+AMAZON_LINUX=("amazonlinux" "current" "amd64")
+CENTOS9_STREAM=("centos" "9-Stream" "amd64")
+DEBIAN_BUSTER=("debian" "buster" "amd64")
+DEBIAN_BULLSEYE=("debian" "bullseye" "amd64")
+ROCKYLINUX_8=("rockylinux" "8" "amd64")
+ROCKYLINUX_9=("rockylinux" "9" "amd64")
+UBUNTU_FOCAL=("ubuntu" "focal" "amd64")
+UBUNTU_JAMMY=("ubuntu" "jammy" "amd64")
+ARCH_CURRENT=("archlinux" "current" "amd64")
+BUSYBOX_1_34_1=("busybox" "1.34.1" "amd64")
+KALI_CURRENT=("kali" "current" "amd64")
+
+
+#######################
+#####  functions  #####
+#######################
+
+
+#use ubuntu key server, the default one in lxc-download template is dead
+export_gpg_keyserver () {
+    export DOWNLOAD_KEYSERVER="keyserver.ubuntu.com"
+}
+
+check_arg_num () {
+    if [ "$ARGS_NUM" -ne "$ARGS_NUM_REQUIRED" ]; then
+      printf "\n%s\n" "The option $OPT requires $((ARGS_NUM_REQUIRED-1)) arguments. you entered $((ARGS_NUM-1)) arguments"
+        help
+        exit 1
+    fi
+}
+
+
+list_os () {
+    for DISTRO_INDEX in "${!DISTRO_COMMON_NAMES[@]}";do
+        printf "%s\n" "${DISTRO_COMMON_NAMES[$DISTRO_INDEX]}" | cut -d '(' -f 1
+    done
+}
+
+# list containers existing containers
+list_containers () {
+    lxc-ls -f
+}
+
+
+#other rootless containers images can be found here http://uk.lxd.images.canonical.com/
+#build containers
+create_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+
+    for DISTRO_INDEX in "${!DISTRO_COMMON_NAMES[@]}";do
+        printf "%s\n" "${DISTRO_COMMON_NAMES[$DISTRO_INDEX]}"
+    done
+
+    if [ "$DEPLOY_CONTAINER" == 1 ];then
+        IMAGE_CHOICE=$DEPLOY_CONTAINER_IMAGE
+    else
+        read -r -p "choose image : " IMAGE_CHOICE
+    fi
+
+    case $IMAGE_CHOICE in
+      "alpine 3.15")
+          PARAMS=("${ALPINE_3_15[@]}")
+          ;;
+      "alpine latest")
+          PARAMS=("${ALPINE_EDGE[@]}")
+          ;;
+      "amazonlinux latest")
+          PARAMS=("${AMAZON_LINUX[@]}")
+          ;;
+      "centos 9")
+          PARAMS=("${CENTOS9_STREAM[@]}")
+          ;;
+      "debian 10")
+          PARAMS=("${DEBIAN_BUSTER[@]}")
+          ;;
+      "debian 11")
+          PARAMS=("${DEBIAN_BULLSEYE[@]}")
+          ;;
+      "rockylinux 8")
+          PARAMS=("${ROCKYLINUX_8[@]}")
+          ;;
+      "rockylinux 9")
+          PARAMS=("${ROCKYLINUX_9[@]}")
+          ;;
+      "ubuntu 20.04")
+          PARAMS=("${UBUNTU_FOCAL[@]}")
+          ;;
+      "ubuntu 22.04")
+          PARAMS=("${UBUNTU_JAMMY[@]}")
+          ;;
+      "archlinux current")
+          PARAMS=("${ARCH_CURRENT[@]}")
+          ;;
+      "busybox 1.34.1")
+          PARAMS=("${BUSYBOX_1_34_1[@]}")
+          ;;
+      "kali current")
+          PARAMS=("${KALI_CURRENT[@]}")
+          ;;
+      *)
+          printf "Invalid choice\n"
+          exit 1
+    esac
+
+    lxc-create -t download -n "$CONTAINER_NAME" -- -d "${PARAMS[0]}" -r "${PARAMS[1]}" -a "${PARAMS[2]}"
+
+}
+
+
+
+start_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+    systemd-run --user --scope -p "Delegate=yes" lxc-start -n "$CONTAINER_NAME"
+}
+
+
+stop_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+    systemd-run --user --scope -p "Delegate=yes" lxc-stop -n "$CONTAINER_NAME"
+}
+
+
+attach_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+    systemd-run --user --scope -p "Delegate=yes" lxc-attach -n "$CONTAINER_NAME"
+}
+
+tune_container () {
+    ARGS_NUM_REQUIRED=4
+    check_arg_num
+    if [ "$DEPLOY_CONTAINER" == 1 ];then
+        CGROUP2_CONTROLLER_NAME=$1
+        CONTAINER_NAME=$2
+        CGROUP2_CONTROLLER_VALUE=$3
+    fi
+    PID_OF_CONTAINER=$(ps aux | grep -E '\[lxc monitor\]' | grep "$CONTAINER_NAME" | awk '{print $2}')
+    CGROUP_PARAMS_LOCATION=$(sed 's|0::|/sys/fs/cgroup|g' /proc/"$PID_OF_CONTAINER"/cgroup)
+    CGROUP_PARAMS_SCOPE=$(dirname "$CGROUP_PARAMS_LOCATION")
+    case $CGROUP2_CONTROLLER_NAME in
+  cpuset)
+      echo "$CGROUP2_CONTROLLER_VALUE" > "$CGROUP_PARAMS_SCOPE/cpuset.cpus"
+      ;;
+  cpumax)
+      echo "$CGROUP2_CONTROLLER_VALUE 100000" > "$CGROUP_PARAMS_SCOPE/cpu.max"
+      ;;
+  memmax)
+      echo "$CGROUP2_CONTROLLER_VALUE" > "$CGROUP_PARAMS_SCOPE/memory.max"
+      ;;
+    esac
+}
+
+
+destroy_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+    lxc-destroy -n "$CONTAINER_NAME"
+}
+
+deploy_container () {
+    ARGS_NUM_REQUIRED=6
+    check_arg_num
+    DEPLOY_CONTAINER=1
+    ARGS_NUM=2
+    create_container "$CONTAINER_NAME" "$DEPLOY_CONTAINER_IMAGE"
+    start_container "$CONTAINER_NAME"
+    ARGS_NUM=4
+    tune_container cpuset "$CONTAINER_NAME" "$DEPLOY_CONTAINER_CPUSET"
+    tune_container cpumax "$CONTAINER_NAME" "$DEPLOY_CONTAINER_CPUMAX"
+    tune_container memmax "$CONTAINER_NAME" "$DEPLOY_CONTAINER_MEMMAX"
+}
+
+snapshot_container () {
+    ARGS_NUM_REQUIRED=3
+    check_arg_num
+    ARGS_NUM=2
+    echo "$COMMENT" > ./comment_file
+    stop_container "$CONTAINER_NAME" &&
+    lxc-snapshot -n "$CONTAINER_NAME" -c ./comment_file &&
+    rm ./comment_file
+    ARGS_NUM=2
+    start_container "$CONTAINER_NAME"
+}
+
+list_snapshot_container () {
+    ARGS_NUM_REQUIRED=2
+    check_arg_num
+    lxc-snapshot -L -C -n "$CONTAINER_NAME"
+}
+
+restore_snapshot_container () {
+    ARGS_NUM_REQUIRED=3
+    check_arg_num
+    ARGS_NUM=2
+    stop_container "$CONTAINER_NAME" &&
+    lxc-snapshot -n "$CONTAINER_NAME" -r "$SNAPSHOT_NAME" &&
+    start_container "$CONTAINER_NAME"
+}
+
+expose_port () {
+    echo "sudo iptables -i br0 -t nat -I PREROUTING -p $PROTOCOL --dport $PUBLIC_PORT -j DNAT --to $CONTAINER_IP:$CONTAINER_PORT"
+}
+
+unexpose_port () {
+    echo "sudo iptables -i br0 -t nat -D PREROUTING -p $PROTOCOL --dport $PUBLIC_PORT -j DNAT --to $CONTAINER_IP:$CONTAINER_PORT"
+}
+
+list_exposed_ports () {
+    echo "sudo iptables -t nat -v -nL PREROUTING"
+}
+
+help () {
+    printf "\n"
+    printf "%s\n\n" "Usage: lx-containers"
+    printf "\t%s\t%s\n" "-lo" "--list-os"
+    printf "\t%s\t%s\n" "-ls" "--list-containers"
+    printf "\t%s\t%s\n" "-cc" "--create-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-sc" "--start-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-hc" "--halt-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-ac" "--attach-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-tc" "--tune-container [CONTAINER NAME] [cupset] [examples of values : [ 0 | 0,1 | 0-3 ]] # core 0 or core 0 and 1  or core 0 to 3"
+    printf "\t%s\n"           "                 [CONTAINER NAME] [cpumax] [example of value : 10000 ] # this is 10000 out of 100000 so 10%"
+    printf "\t%s\n"           "                 [CONTAINER NAME] [memmax] [example of value : 200M]"
+    printf "\t%s\t%s\n" "-Dc" "--destroy-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-dc" "--deploy-container [CONTAINER NAME] [CONTAINER IMAGE] [cpuset-value] [cpumax-value] [memmax-value]"
+    printf "\t%s\t%s\n" "-sn" "--shapshot-container [CONTAINER NAME] \"description of the snapshot\""
+    printf "\t%s\t%s\n" "-lsn" "--list-shapshot-container [CONTAINER NAME]"
+    printf "\t%s\t%s\n" "-rsn" "--restore-shapshot-container [CONTAINER NAME] [SNAPSHOT NAME]"
+    printf "\t%s\t%s\n" "-ep" "--expose-port [public port] [container ip] [container port] [protocol] # this is only useful for ipv4"
+    printf "\t%s\t%s\n" "-up" "--unexpose-port [public port] [container ip] [container port] [protocol] # this is only useful for ipv4"
+    printf "\t%s\t%s\n" "-lep" "--list-exposed-ports"
+    printf "\t%s\t%s\n" "-h" "--help"
+    printf "\n"
+}
+
+
+####################
+#####  script  #####
+####################
+
+export_gpg_keyserver
+
+case $1 in
+    -lo|--list-os)
+        list_os
+    ;;
+    -ls|--list-containers)
+        list_containers
+        ;;
+    -cc|--create-container)
+        create_container
+        ;;
+    -sc|--start-container)
+        start_container
+        ;;
+    -hc|--halt-container)
+        stop_container
+        ;;
+    -ac|--attach-container)
+        attach_container
+        ;;
+    -tc|--tune-container)
+        CGROUP2_CONTROLLER_NAME=$3
+        CGROUP2_CONTROLLER_VALUE=$4
+        tune_container
+        ;;
+    -Dc|--destroy-container)
+        destroy_container
+        ;;
+    -dc|--deploy-container)
+        DEPLOY_CONTAINER_IMAGE=$3
+        DEPLOY_CONTAINER_CPUSET=$4
+        DEPLOY_CONTAINER_CPUMAX=$5
+        DEPLOY_CONTAINER_MEMMAX=$6
+        deploy_container
+        ;;
+    -sn|--snapshot-container)
+        COMMENT=$3
+        snapshot_container
+        ;;
+    -lsn|--list-snapshot-container)
+        list_snapshot_container
+        ;;
+    -rsn|--rsn-snapshot-container)
+        SNAPSHOT_NAME=$3
+        restore_snapshot_container
+        ;;
+    -ep|--expose-port)
+        PUBLIC_PORT=$2
+        CONTAINER_IP=$3
+        CONTAINER_PORT=$4
+        PROTOCOL=$5
+        expose_port
+        ;;
+    -up|--unexpose-port)
+        PUBLIC_PORT=$2
+        CONTAINER_IP=$3
+        CONTAINER_PORT=$4
+        PROTOCOL=$5
+        unexpose_port
+        ;;
+    -lep|--list-exposed-ports)
+        list_exposed_ports
+        ;;
+    *)
+        help
+        ;;
+esac
+

@@ -1,0 +1,88 @@
+---
+- name: Gather the package facts
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: configure sudoers
+  template:
+    src: templates/sudoers.j2
+    dest: /etc/sudoers
+    owner: root
+    group: root
+    mode: 0440
+
+- name: Ensure user "debian" exists 
+  user:
+    name: debian 
+    shell: /bin/bash
+    groups: sudo
+
+- name: stop and disable ufw
+  ansible.builtin.service:
+    name: ufw
+    state: stopped
+    enabled: no
+  when: "'ufw' in ansible_facts.packages"
+
+- name: remove and purge ufw
+  apt:
+    name: ufw
+    state: absent
+    purge: yes
+  when: "'ufw' in ansible_facts.packages"
+
+- name: "Check if iptables exists"
+  stat:
+    path: "/etc/iptables"
+  register: result
+
+- name: flush old ufw rules
+  ansible.builtin.shell: iptables -F
+  when: not result.stat.exists
+
+- name: remove old ufw chains
+  ansible.builtin.shell: iptables -X
+  when: not result.stat.exists
+
+- name: install iptables file
+  template:
+    src: templates/iptables.j2
+    dest: /etc/iptables
+    owner: root
+    group: root
+    mode: 0440
+
+- name: install iptables6 file
+  template:
+    src: templates/iptables6.j2
+    dest: /etc/ip6tables
+    owner: root
+    group: root
+    mode: 0440
+
+- name: create ~/.ssh dir for user debian
+  ansible.builtin.file:
+    path: /home/debian/.ssh
+    state: directory
+    owner: debian
+    group: debian
+    mode: 0700
+
+- name: move authorized_keys from root to debian
+  ansible.builtin.shell: cp /root/.ssh/authorized_keys /home/debian/.ssh/authorized_keys
+
+- name: chown debian authorized_keys
+  ansible.builtin.shell: chown debian:debian /home/debian/.ssh/authorized_keys
+
+- name: configure sshd_config from template
+  template:
+    src: templates/sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: 0644
+
+- name: restart ssh 
+  ansible.builtin.service:
+    name: ssh
+    state: restarted

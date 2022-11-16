@@ -1,0 +1,16 @@
+---
+- name: check if this system was already rebooted
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  stat:
+    path: /WAS_REBOOTED_FOR_CGROUP
+  register: was_rebooted
+  
+- name: reboot the system if this is the first time this playbook is running
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.shell: touch /WAS_REBOOTED_FOR_CGROUP && reboot
+  when : not was_rebooted.stat.exists 
+  

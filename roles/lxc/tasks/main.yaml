@@ -1,0 +1,9 @@
+---
+- include : get_facts.yaml
+- include : setup_bridge.yaml
+- include : secure_box.yaml
+- include : install_lxc.yaml
+- include : install_custom_script.yaml
+- include : install_dhcpd.yaml
+- include : fix_network_at_reboot.yaml 
+- include : reboot.yaml

@@ -1,0 +1,27 @@
+---
+- name: Template a file to /etc/systemd/system/fix_network.service
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/unit_fix_network.j2 
+    dest:  /etc/systemd/system/fix_network.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Enable service fix_network
+  ansible.builtin.service:
+    name: fix_network
+    enabled: yes
+
+- name: Template a file to /usr/local/bin/fix_network
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/fix_network.j2 
+    dest: /usr/local/bin/fix_network
+    owner: root
+    group: root
+    mode: '0700'

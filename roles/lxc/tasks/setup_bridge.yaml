@@ -1,0 +1,31 @@
+---
+- name: install bridge-utils
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.package:
+    name: bridge-utils
+    state: present
+  
+- name: configure /etc/network/interfaces
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.template:
+    src: templates/br0.j2
+    dest: /etc/network/interfaces
+  when : "'br0' not in ansible_interfaces" 
+
+- name: enable ip forwarding
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.shell: sysctl -w net.ipv4.ip_forward=1
+
+- name: restart networking 
+  remote_user: debian
+  become: yes
+  become_method: sudo
+  ansible.builtin.service:
+    name: networking
+    state: restarted

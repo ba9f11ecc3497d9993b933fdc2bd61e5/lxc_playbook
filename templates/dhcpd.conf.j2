@@ -1,0 +1,12 @@
+option domain-name-servers {{ nameserver_v4.stdout_lines[0] }};
+
+default-lease-time 600;
+max-lease-time 7200;
+ddns-update-style none;
+
+# This is a very basic subnet declaration.
+
+subnet 10.0.0.0 netmask 255.255.0.0 {
+  range 10.0.0.2 10.0.255.254;
+  option routers 10.0.0.1;
+}
